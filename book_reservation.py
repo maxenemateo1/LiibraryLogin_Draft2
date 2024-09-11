@@ -10,7 +10,7 @@ def book_reservation_window(search_tab, reservation_tab, username, role):
 
 def setup_search_and_reserve_tab(tab, username):
     """Setup the search and reserve tab with book information, filters, search results, and cart."""
-    global book_info_frame, available_label, isbn_label, title_label, author_label, abstract_text, search_tree, cart_tree
+    global book_info_frame, available_label, isbn_label, title_label, author_label, abstract_text, search_tree, cart_tree, add_to_cart_button
 
     # Main content frame
     content_frame = tk.Frame(tab)
@@ -43,8 +43,8 @@ def setup_search_and_reserve_tab(tab, username):
     abstract_text.grid(row=5, column=1, padx=10, pady=5, sticky="w")
 
     # Add 'Add to Cart' button
-    global add_to_cart_button
     add_to_cart_button = tk.Button(book_info_frame, text="Add to Cart", command=lambda: add_to_cart(isbn_label.cget("text"), title_label.cget("text")))
+    add_to_cart_button.grid(row=7, column=1, pady=10, sticky="w")
 
     # Navigation Buttons
     nav_frame = tk.Frame(book_info_frame)
@@ -53,14 +53,14 @@ def setup_search_and_reserve_tab(tab, username):
     tk.Button(nav_frame, text="<<", relief=tk.GROOVE, width=3).pack(side="left", padx=5)
     tk.Button(nav_frame, text=">>", relief=tk.GROOVE, width=3).pack(side="left", padx=5)
 
-    # Cart Section (Adjusted to fit buttons to the side)
+    # Cart Section (Adjusted to fit buttons to the right of the cart table)
     cart_frame = tk.Frame(content_frame, relief=tk.GROOVE, borderwidth=2)
     cart_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
     tk.Label(cart_frame, text="Cart", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
 
     # Cart Table
-    cart_tree = ttk.Treeview(cart_frame, columns=("title", "isbn"), show="headings", selectmode="extended")  # Use "extended" for multiple selection
+    cart_tree = ttk.Treeview(cart_frame, columns=("title", "isbn"), show="headings", selectmode="extended")
     cart_tree.heading("title", text="Title")
     cart_tree.heading("isbn", text="ISBN")
     cart_tree.pack(side="left", fill=tk.BOTH, expand=1, padx=(10, 0), pady=5)
@@ -108,7 +108,7 @@ def setup_search_and_reserve_tab(tab, username):
     tk.Label(search_results_frame, text="Search Results", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
 
     # Search Results Table
-    search_tree = ttk.Treeview(search_results_frame, columns=("isbn", "title"), show="headings", selectmode="browse")  # Use "browse" for single selection
+    search_tree = ttk.Treeview(search_results_frame, columns=("isbn", "title"), show="headings", selectmode="browse")
     search_tree.heading("isbn", text="ISBN")
     search_tree.heading("title", text="Title")
     search_tree.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
@@ -144,12 +144,11 @@ def perform_search(title, isbn, category, search_tree):
         # Update the search results tree
         search_tree.delete(*search_tree.get_children())
         for book in books:
-            search_tree.insert("", "end", values=(book[0], book[1]))  # Adjust based on your DB schema
+            search_tree.insert("", "end", values=(book[0], book[1]))
     except Exception as e:
         messagebox.showerror("Query Error", f"An error occurred: {e}")
     finally:
         conn.close()
-
 
 def on_search_result_select(event):
     """Update the book information display when a search result is selected."""
@@ -191,6 +190,9 @@ def add_to_cart(isbn, title):
     if not isbn or not title:
         messagebox.showwarning("Input Error", "ISBN and Title must be provided.")
         return
+
+    # Ensure ISBN is a string
+    isbn = str(isbn)
 
     # Check if the book is already in the cart
     for child in cart_tree.get_children():
@@ -290,7 +292,6 @@ def load_reservations(username):
         messagebox.showerror("Query Error", f"An error occurred: {e}")
     finally:
         conn.close()
-
 
 # Example Tkinter setup
 root = tk.Tk()
