@@ -1,17 +1,15 @@
-Here's the updated code with the search functionality properly integrated, along with the cart management functionality:
-
-```python
 import tkinter as tk
 from tkinter import messagebox, ttk
 from database import connect_to_db
 
-# Define global variables for search results, current book index, and cart
+# Global variables for search results and current book index
 rows = []
 current_book_index = -1
-cart = []
 
 def setup_search_tab(tab, role, username):
-    global category_combobox, title_entry, author_entry, isbn_entry, book_info_frame, title_value, author_value, isbn_value, stock_value, abstract_text, prev_button, next_button, search_results_treeview, cart_treeview
+    global category_combobox, title_entry, author_entry, isbn_entry
+    global book_info_frame, title_value, author_value, isbn_value, stock_value, abstract_text
+    global prev_button, next_button, search_results_treeview
 
     # Frame for search and filter
     search_tab_frame = tk.Frame(tab, bg="white")
@@ -27,10 +25,12 @@ def setup_search_tab(tab, role, username):
     # Category Filter
     category_label = tk.Label(filter_frame, text="Category", bg="white")
     category_label.pack(anchor="w", padx=10)
-    category_combobox = ttk.Combobox(filter_frame, values=["All", "Communication", "Electronic media", "Mechatronics", "Databases",
-            "Electronics Engineering", "Web Design", "Automotive", "Electronics",
-            "Plumbing", "Game Art", "Programming", "Utilities", "Networking",
-            "Game Design", "Game Programming", "ICT"])
+    category_combobox = ttk.Combobox(filter_frame, values=[
+        "All", "Communication", "Electronic media", "Mechatronics", "Databases",
+        "Electronics Engineering", "Web Design", "Automotive", "Electronics",
+        "Plumbing", "Game Art", "Programming", "Utilities", "Networking",
+        "Game Design", "Game Programming", "ICT"
+    ])
     category_combobox.set("All")
     category_combobox.pack(anchor="w", padx=10, pady=5)
 
@@ -55,6 +55,19 @@ def setup_search_tab(tab, role, username):
     # Search Button
     search_button = tk.Button(filter_frame, text="Search", command=search_books_action, relief=tk.GROOVE)
     search_button.pack(pady=10, padx=10)
+
+    # Search Results Section
+    results_frame = tk.Frame(search_tab_frame, relief=tk.GROOVE, borderwidth=2, bg="white")
+    results_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=1, padx=10, pady=10)
+
+    search_results_label = tk.Label(results_frame, text="Search Results", font=("Arial", 12, "bold"), bg="white")
+    search_results_label.pack(anchor="w", padx=10, pady=5)
+
+    search_results_treeview = ttk.Treeview(results_frame, columns=("Title", "ISBN"), show='headings')
+    search_results_treeview.heading("Title", text="Title")
+    search_results_treeview.heading("ISBN", text="ISBN")
+    search_results_treeview.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
+    search_results_treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 
     # Book Information Section
     book_info_frame = tk.Frame(search_tab_frame, relief=tk.GROOVE, borderwidth=2, bg="white")
@@ -90,31 +103,6 @@ def setup_search_tab(tab, role, username):
 
     next_button = tk.Button(nav_frame, text=">>", relief=tk.GROOVE, width=3, command=next_book)
     next_button.pack(side="left", padx=5)
-
-    # Cart Section (only visible for non-guests)
-    if role != "guest":
-        cart_frame = tk.Frame(search_tab_frame, bg="white", relief=tk.GROOVE, borderwidth=2)
-        cart_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1, padx=10, pady=10)
-
-        tk.Label(cart_frame, text="Cart", bg="white").pack(anchor="w", padx=10)
-
-        # Cart Treeview
-        cart_treeview = ttk.Treeview(cart_frame, columns=("Title", "ISBN"), show="headings")
-        cart_treeview.heading("Title", text="Title")
-        cart_treeview.heading("ISBN", text="ISBN")
-        cart_treeview.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
-
-        # Add to Cart Button
-        add_to_cart_button = tk.Button(cart_frame, text="Add to Cart", command=add_to_cart_action, relief=tk.GROOVE)
-        add_to_cart_button.pack(pady=10)
-
-        # Remove from Cart Button
-        remove_from_cart_button = tk.Button(cart_frame, text="Remove Selected Book", command=remove_from_cart_action, relief=tk.GROOVE)
-        remove_from_cart_button.pack(pady=10)
-
-        # Reserve Button
-        reserve_button = tk.Button(cart_frame, text="Reserve Listed Books", command=reserve_books_action, relief=tk.GROOVE)
-        reserve_button.pack(pady=10)
 
 def search_books(title, author, isbn, category, search_results_treeview):
     conn = connect_to_db()
@@ -178,65 +166,17 @@ def update_book_info(book):
 
 def prev_book():
     if current_book_index > 0:
-        display_book(current_book
-                for book in cart:
-            isbn = book[0]
-            cursor.execute("INSERT INTO tblReserveTransaction (UserID, ISBN, DateReserved, Notes) VALUES (?, ?, GETDATE(), ?)",
-                           (user_id, isbn, 'Reserved via Tkinter App'))
-        conn.commit()
-        messagebox.showinfo("Reservation Successful", f"You reserved {len(cart)} books in your account.")
-        cart.clear()
-        cart_treeview.delete(*cart_treeview.get_children())  # Clear the cart display
-    except Exception as e:
-        messagebox.showerror("Reservation Error", f"An error occurred while reserving books: {e}")
-    finally:
-        conn.close()
+        display_book(current_book_index - 1)
 
-def get_user_id():
-    """Returns the user ID of the currently logged-in user."""
-    # This function should be implemented to retrieve the user ID based on the current session or logged-in user details
-    # For demonstration purposes, let's return a mock user ID.
-    return 1  # Replace with actual user ID retrieval logic
+def next_book():
+    if current_book_index < len(rows) - 1:
+        display_book(current_book_index + 1)
 
-def setup_search_results_treeview(parent_frame):
-    """Sets up the Treeview for displaying search results."""
-    global search_results_treeview
+def on_treeview_select(event):
+    """Handle selection in the treeview."""
+    selected_item = search_results_treeview.selection()
+    if selected_item:
+        index = search_results_treeview.index(selected_item[0])
+        display_book(index)
 
-    search_results_treeview = ttk.Treeview(parent_frame, columns=("Title", "ISBN"), show="headings")
-    search_results_treeview.heading("Title", text="Title")
-    search_results_treeview.heading("ISBN", text="ISBN")
-    search_results_treeview.bind("<Double-1>", on_search_results_double_click)
-    search_results_treeview.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
-
-def on_search_results_double_click(event):
-    """Handles the event when a search result is double-clicked."""
-    item = search_results_treeview.selection()[0]
-    book_isbn = search_results_treeview.item(item, "values")[1]
-    global rows
-    for index, book in enumerate(rows):
-        if book[0] == book_isbn:
-            display_book(index)
-            break
-
-# Example usage within Tkinter application setup
-def create_main_window():
-    root = tk.Tk()
-    root.title("Library System")
-
-    notebook = ttk.Notebook(root)
-    notebook.pack(fill=tk.BOTH, expand=1)
-
-    # Create tabs
-    search_tab = ttk.Frame(notebook)
-    notebook.add(search_tab, text="Search and Reserve")
-
-    # Setup search tab
-    role = "member"  # Example role; replace with actual role from user session
-    username = "example_user"  # Example username; replace with actual username from user session
-    setup_search_tab(search_tab, role, username)
-    setup_search_results_treeview(search_tab)
-
-    root.mainloop()
-
-if __name__ == "__main__":
-    create_main_window()
+# The setup function would be called from your main application when initializing the tab
