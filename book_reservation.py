@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from database import connect_to_db
 from datetime import datetime
+from book_transaction import setup_borrowing_transaction_facility
+
 
 def book_reservation_window(search_tab, reservation_tab, username, role):
     """Setup both search and reservation functionalities in the window."""
@@ -215,6 +217,10 @@ def remove_from_cart(cart_tree):
 
 def reserve_books(cart_tree, username):
     """Handle reservation of books in the cart."""
+    if not username:
+        messagebox.showwarning("User Error", "Username must be provided.")
+        return
+
     cart_items = cart_tree.get_children()
     if not cart_items:
         messagebox.showwarning("No Items", "No items in the cart to reserve.")
@@ -228,7 +234,7 @@ def reserve_books(cart_tree, username):
     cursor = conn.cursor()
     try:
         # Retrieve UserID for the given username
-        cursor.execute("SELECT UserID FROM tblUser WHERE Username = ?", (username,))
+        cursor.execute("SELECT UserID FROM tblUsers WHERE Uname = ?", (username,))
         user_id_result = cursor.fetchone()
         if user_id_result is None:
             messagebox.showerror("User Error", "Username not found in the database.")
@@ -239,7 +245,7 @@ def reserve_books(cart_tree, username):
         # Insert each item into tblReserveTransaction
         for item in cart_items:
             isbn = cart_tree.item(item, "values")[1]
-            cursor.execute("INSERT INTO tblReserveTransaction (UserID, ISBN, DateResreved) VALUES (?, ?, ?)",
+            cursor.execute("INSERT INTO tblReserveTransaction (UserID, ISBN, DateReserved) VALUES (?, ?, ?)",
                            (user_id, isbn, datetime.now().date()))
         
         conn.commit()
@@ -250,6 +256,7 @@ def reserve_books(cart_tree, username):
         messagebox.showerror("Reservation Error", f"An error occurred: {e}")
     finally:
         conn.close()
+
 
 def setup_reservation_tab(tab, username):
     """Setup the reservation tab with a list of current reservations and options to manage them."""
