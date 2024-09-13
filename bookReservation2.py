@@ -1,168 +1,18 @@
-import tkinter as tk 
+import tkinter as tk
 from tkinter import messagebox, ttk
 from database import connect_to_db
 from datetime import datetime
 
-# Book Reservation Window
-def setup_borrowing_tab(tab, username):
-    """Setup the borrowing tab with a list of borrowed books and return functionality."""
-    tk.Label(tab, text="Borrowed Books", font=("Arial", 12, "bold")).pack(pady=20)
-
-    # Borrowed Books Table
-    global borrowing_tree
-    borrowing_frame = tk.Frame(tab, relief=tk.GROOVE, borderwidth=2)
-    borrowing_frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
-
-    tk.Label(borrowing_frame, text="Your Borrowed Books", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
-
-    borrowing_tree = ttk.Treeview(borrowing_frame, columns=("isbn", "title", "date"), show="headings", selectmode="extended")
-    borrowing_tree.heading("isbn", text="ISBN")
-    borrowing_tree.heading("title", text="Title")
-    borrowing_tree.heading("date", text="Date Borrowed")
-    borrowing_tree.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
-
-    # Buttons for Borrowing Tab
-    button_frame = tk.Frame(borrowing_frame)
-    button_frame.pack(fill=tk.X, padx=10, pady=5)
-
-    tk.Button(button_frame, text="Return Selected Book", command=lambda: return_book(username)).pack(side="left", padx=5)
-    tk.Button(button_frame, text="Borrow Reserved Books", command=lambda: borrow_reserved_books(username)).pack(side="left", padx=5)
-
-    # Load borrowed books for the user
-    load_borrowed_books(username)
-
-    # Setup Borrowing Tab
-def setup_borrowing_tab(tab, username):
-    """Setup the borrowing tab with a list of borrowed books and return functionality."""
-    tk.Label(tab, text="Borrowed Books", font=("Arial", 12, "bold")).pack(pady=20)
-
-    # Borrowed Books Table
-    global borrowing_tree
-    borrowing_frame = tk.Frame(tab, relief=tk.GROOVE, borderwidth=2)
-    borrowing_frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
-
-    tk.Label(borrowing_frame, text="Your Borrowed Books", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
-
-    borrowing_tree = ttk.Treeview(borrowing_frame, columns=("isbn", "title", "date"), show="headings", selectmode="extended")
-    borrowing_tree.heading("isbn", text="ISBN")
-    borrowing_tree.heading("title", text="Title")
-    borrowing_tree.heading("date", text="Date Borrowed")
-    borrowing_tree.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
-
-    # Buttons for Borrowing Tab
-    button_frame = tk.Frame(borrowing_frame)
-    button_frame.pack(fill=tk.X, padx=10, pady=5)
-
-    tk.Button(button_frame, text="Return Selected Book", command=lambda: return_book(username)).pack(side="left", padx=5)
-    tk.Button(button_frame, text="Borrow Reserved Books", command=lambda: borrow_reserved_books(username)).pack(side="left", padx=5)
-
-    # Load borrowed books for the user
-    load_borrowed_books(username)
-
-# Load Borrowed Books
-def load_borrowed_books(username):
-    """Load borrowed books for the given username and populate the borrowing transactions table."""
-    conn = connect_to_db()
-    if conn is None:
-        messagebox.showerror("Database Error", "Unable to connect to the database.")
-        return
-
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT UserID FROM tblusers WHERE Username=?", (username,))
-        user_id = cursor.fetchone()[0]
-
-        cursor.execute("""
-            SELECT tblBorrowTran.ISBN, tblBooks.Title, tblBorrowTran.DateBorrowed
-            FROM tblBorrowTran
-            INNER JOIN tblBooks ON tblBorrowTran.ISBN = tblBooks.ISBN
-            WHERE tblBorrowTran.UserID=?
-              AND tblBorrowTran.IsBookReturned=0
-            """, (user_id,))
-        borrowed_books = cursor.fetchall()
-
-        borrowing_tree.delete(*borrowing_tree.get_children())
-        for book in borrowed_books:
-            borrowing_tree.insert("", "end", values=(book[0], book[1], book[2]))
-    except Exception as e:
-        messagebox.showerror("Query Error", f"An error occurred: {e}")
-    finally:
-        conn.close()
-
-# Borrow Books
-def borrow_book(isbn, username):
-    """Handle borrowing a book."""
-    conn = connect_to_db()
-    if conn is None:
-        messagebox.showerror("Database Error", "Unable to connect to the database.")
-        return
-
-    cursor = conn.cursor()
-    try:
-        # Check if the book is available
-        cursor.execute("SELECT InStock FROM tblBooks WHERE ISBN = ?", (isbn,))
-        book = cursor.fetchone()
-        if not book or book[0] <= 0:
-            messagebox.showwarning("Book Unavailable", "The book is not available for borrowing.")
-            conn.close()
-            return
-
-        # Insert a new borrowing transaction
-        cursor.execute("INSERT INTO tblBorrowTran (UserID, ISBN, DateBorrowed) VALUES ((SELECT UserID FROM Users WHERE Username = ?), ?, ?)",
-                       (username, isbn, datetime.now()))
-
-        # Update the book stock
-        cursor.execute("UPDATE tblBooks SET InStock = InStock - 1 WHERE ISBN = ?", (isbn,))
-
-        conn.commit()
-        messagebox.showinfo("Borrow Successful", "The book has been borrowed successfully.")
-
-    except Exception as e:
-        messagebox.showerror("Database Error", f"Error executing query: {e}")
-
-    conn.close()
-    load_borrowing_records(username)
-
-# Loadd Borrowing Records
-def load_borrowing_records(username, borrow_tree):
-    """Load borrowing records for the user and update the borrow tree."""
-    conn = connect_to_db()
-    if conn is None:
-        messagebox.showerror("Database Error", "Unable to connect to the database.")
-        return
-
-    cursor = conn.cursor()
-    query = """SELECT bt.ISBN, b.Title, bt.DateBorrowed, bt.IsBookReturned
-               FROM tblBorrowTran bt
-               JOIN tblBooks b ON bt.ISBN = b.ISBN
-               JOIN Users u ON bt.UserID = u.UserID
-               WHERE u.Username = ?"""
-    
-    try:
-        cursor.execute(query, (username,))
-        borrowings = cursor.fetchall()
-    except Exception as e:
-        messagebox.showerror("Database Error", f"Error executing query: {e}")
-        conn.close()
-        return
-
-    # Clear previous records in the borrow tree
-    for row in borrow_tree.get_children():
-        borrow_tree.delete(row)
-
-    # Insert new records into the borrow tree
-    for borrowing in borrowings:
-        borrow_tree.insert("", "end", values=(borrowing[0], borrowing[1], borrowing[2], "Yes" if borrowing[3] else "No"))
-
-    conn.close()
-
+# Function definitions from your code
+def book_reservation_window(search_tab, reservation_tab, username, role):
+    """Set up the search and reserve tab, and the transaction record tab."""
+    setup_search_and_reserve_tab(search_tab, username)
+    setup_transaction_record_tab(reservation_tab, username)
 
 def setup_search_and_reserve_tab(tab, username):
     """Setup the search and reserve tab with book information, filters, search results, and cart."""
-    global book_info_frame, available_label, isbn_label, title_label, author_label, abstract_text
-    global search_tree, cart_tree, add_to_cart_button, category_combobox, title_entry, isbn_entry
+    global book_info_frame, available_label, isbn_label, title_label, author_label, abstract_text, search_tree, cart_tree, add_to_cart_button
 
-    # Main content frame
     content_frame = tk.Frame(tab)
     content_frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
 
@@ -266,6 +116,35 @@ def setup_search_and_reserve_tab(tab, username):
     # Bind the selection event to a function
     search_tree.bind("<<TreeviewSelect>>", on_search_result_select)
 
+# Transaction Tab
+def setup_transaction_record_tab(tab, username):
+    """Setup the Transaction Record tab with the user's transaction history."""
+    content_frame = tk.Frame(tab)
+    content_frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
+
+    # Transaction Record Header
+    tk.Label(content_frame, text="Transaction Record", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
+
+    # Transaction Table
+    transaction_tree = ttk.Treeview(content_frame, columns=("isbn", "date_borrowed", "status"), show="headings", selectmode="browse")
+    transaction_tree.heading("isbn", text="ISBN")
+    transaction_tree.heading("date_borrowed", text="Date Borrowed")
+    transaction_tree.heading("status", text="Status")
+    transaction_tree.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
+
+    # Populate the table with the user's transaction data
+    # Replace this with actual database calls to fetch the transaction history for the user
+    # Example data for demonstration purposes:
+    transaction_data = [
+        ("978-3-16-148410-0", "2024-09-01", "Returned"),
+        ("978-0-13-110362-7", "2024-09-05", "Borrowed")
+    ]
+    
+    for transaction in transaction_data:
+        transaction_tree.insert('', 'end', values=transaction)
+
+    # You can add additional buttons or features here as needed
+
 def perform_search(title, isbn, category, search_tree):
     """Handle search logic and update search results."""
     conn = connect_to_db()
@@ -290,136 +169,124 @@ def perform_search(title, isbn, category, search_tree):
     try:
         cursor.execute(query, parameters)
         books = cursor.fetchall()
+        
+        # Update the search results tree
+        search_tree.delete(*search_tree.get_children())
+        for book in books:
+            search_tree.insert("", "end", values=(book[0], book[1]))
     except Exception as e:
-        messagebox.showerror("Database Error", f"Error executing query: {e}")
+        messagebox.showerror("Database Error", str(e))
+    finally:
         conn.close()
-        return
-
-    # Clear previous results
-    for row in search_tree.get_children():
-        search_tree.delete(row)
-
-    # Insert new results
-    for book in books:
-        search_tree.insert("", "end", values=(book[0], book[1]))
-
-    conn.close()
-
 
 def on_search_result_select(event):
-    """Handle book selection from search results."""
+    """Handle selection of a search result."""
     selected_item = search_tree.selection()
-    if not selected_item:
-        return
+    if selected_item:
+        values = search_tree.item(selected_item[0], "values")
+        if values:
+            isbn, title = values
+            display_book_info(isbn)
 
-    item = search_tree.item(selected_item)
-    isbn = item['values'][0]
-    # Populate book information
-    load_book_info(isbn)
-
-def load_book_info(isbn):
-    """Load detailed book information based on selected ISBN."""
+def display_book_info(isbn):
+    """Fetch and display book information."""
     conn = connect_to_db()
     if conn is None:
         messagebox.showerror("Database Error", "Unable to connect to the database.")
         return
 
     cursor = conn.cursor()
-    query = "SELECT ISBN, Title, Author, Abstract, InStock FROM tblBooks WHERE tblBooks.ISBN = ?"
-    
     try:
-        cursor.execute(query, (isbn,))
+        cursor.execute("SELECT ISBN, Title, Author, Abstract FROM tblBooks WHERE ISBN = ?", (isbn,))
         book = cursor.fetchone()
+        
+        if book:
+            isbn_label.config(text=book[0])
+            title_label.config(text=book[1])
+            author_label.config(text=book[2])
+            abstract_text.delete(1.0, tk.END)
+            abstract_text.insert(tk.END, book[3])
+            available_label.config(text="Yes")  # Example, adjust as needed
+        else:
+            messagebox.showinfo("No Results", "No book found with that ISBN.")
+            clear_book_info()
     except Exception as e:
-        messagebox.showerror("Database Error", f"Error executing query: {e}")
+        messagebox.showerror("Database Error", str(e))
+    finally:
         conn.close()
-        return
 
-    if book:
-        isbn_label.config(text=book[0])
-        title_label.config(text=book[1])
-        author_label.config(text=book[2])
-        abstract_text.delete(1.0, tk.END)
-        abstract_text.insert(tk.END, book[3])
-        available_label.config(text="Yes" if book[4] > 0 else "No")
-    else:
-        messagebox.showwarning("No Results", "No book details found.")
+def clear_book_info():
+    """Clear the book information fields."""
+    isbn_label.config(text="--")
+    title_label.config(text="--")
+    author_label.config(text="--")
+    abstract_text.delete(1.0, tk.END)
+    available_label.config(text="--")
 
-    conn.close()
-
-# Add to Cart
-def add_to_cart(isbn, title):
+def add_to_cart(isbn, title,role):
     """Add selected book to cart."""
-    if isbn == "--":
-        messagebox.showwarning("No Selection", "No book selected to add to cart.")
-        return
-
-    for item in cart_tree.get_children():
-        if cart_tree.item(item, "values")[1] == isbn:
-            messagebox.showinfo("Already in Cart", "This book is already in your cart.")
-            return
-
-    cart_tree.insert("", "end", values=(title, isbn))
+    if role == "member":
+        cart_tree.insert("", "end", values=(title, isbn))
+    else:
+        messagebox.showinfo("Cart", "You must be logged in to add books to the cart.")
 
 def remove_from_cart(cart_tree):
-    """Remove selected book from the cart."""
+    """Remove selected book from cart."""
     selected_item = cart_tree.selection()
-    if not selected_item:
-        messagebox.showwarning("No Selection", "No book selected to remove from cart.")
-        return
-
-    for item in selected_item:
-        cart_tree.delete(item)
+    if selected_item:
+        cart_tree.delete(selected_item)
+    else:
+        messagebox.showinfo("Cart", "No book selected to remove.")
 
 def reserve_books(cart_tree, username):
-    """Reserve books in the cart for the user."""
+    """Reserve books in the cart for the current member."""
+    selected_items = cart_tree.get_children()
+    if not selected_items:
+        messagebox.showinfo("Cart", "No books selected for reservation.")
+        return
+    
     conn = connect_to_db()
     if conn is None:
         messagebox.showerror("Database Error", "Unable to connect to the database.")
         return
 
     cursor = conn.cursor()
-    reserved_count = 0
-    for item in cart_tree.get_children():
-        isbn = cart_tree.item(item, "values")[1]
-        try:
-            cursor.execute("INSERT INTO tblReserveTransaction (UserID, ISBN, DateResreved) VALUES ((SELECT UserID FROM Users WHERE Username = ?), ?, ?)",
-                           (username, isbn, datetime.now()))
-            reserved_count += 1
-        except Exception as e:
-            messagebox.showerror("Database Error", f"Error executing query: {e}")
+    try:
+        for item in selected_items:
+            values = cart_tree.item(item, "values")
+            title, isbn = values
+            
+            # Create a reservation record
+            cursor.execute("INSERT INTO tblReserveTransaction (UserID, ISBN, DateResreved) VALUES (?, ?, ?)",
+                           (username, isbn, datetime.now().strftime('%Y-%m-%d')))
+        
+        conn.commit()
+        cart_tree.delete(*cart_tree.get_children())
+        messagebox.showinfo("Success", f"You reserved {len(selected_items)} book(s) in your account.")
+    except Exception as e:
+        messagebox.showerror("Database Error", str(e))
+    finally:
+        conn.close()
 
-    conn.commit()
-    conn.close()
-
-    if reserved_count > 0:
-        messagebox.showinfo("Reservation Successful", f"You reserved {reserved_count} book(s) in your account.")
-    else:
-        messagebox.showwarning("No Books Reserved", "No books were reserved. Please try again.")
-
-# Setup reservation Tab
 def setup_reservation_tab(tab, username):
-    """Setup the reservation tab with a list of current reservations and options to manage them."""
-    tk.Label(tab, text="Reservations", font=("Arial", 12, "bold")).pack(pady=20)
-
-    # Reservations Table
-    global reserved_tree
+    """Setup the reservation tab to display reservation history."""
     reservation_frame = tk.Frame(tab, relief=tk.GROOVE, borderwidth=2)
     reservation_frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
 
-    tk.Label(reservation_frame, text="Your Reservations", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
+    tk.Label(reservation_frame, text="Reservation History", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=5)
 
-    reserved_tree = ttk.Treeview(reservation_frame, columns=("isbn", "title"), show="headings", selectmode="extended")
-    reserved_tree.heading("isbn", text="ISBN")
-    reserved_tree.heading("title", text="Title")
-    reserved_tree.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
+    # Reservation History Table
+    reservation_tree = ttk.Treeview(reservation_frame, columns=("isbn", "title", "date_reserved"), show="headings", selectmode="browse")
+    reservation_tree.heading("isbn", text="ISBN")
+    reservation_tree.heading("title", text="Title")
+    reservation_tree.heading("date_reserved", text="Date Reserved")
+    reservation_tree.pack(fill=tk.BOTH, expand=1, padx=10, pady=5)
 
     # Load reservations
-    load_reserved_books(username)
+    load_reservations(username, reservation_tree)
 
-    # Loadd Reserved Books
-def load_reserved_books(username):
-    """Load reserved books for the given username and populate the reservations table."""
+def load_reservations(username, reservation_tree):
+    """Load reservation history for the current member."""
     conn = connect_to_db()
     if conn is None:
         messagebox.showerror("Database Error", "Unable to connect to the database.")
@@ -427,157 +294,46 @@ def load_reserved_books(username):
 
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT UserID FROM tblusers WHERE Username=?", (username,))
-        user_id = cursor.fetchone()[0]
-
         cursor.execute("""
-            SELECT tblReserveTransaction.ISBN, tblBooks.Title
+            SELECT ISBN, Title, DateResreved
             FROM tblReserveTransaction
-            INNER JOIN tblBooks ON tblReserveTransaction.ISBN = tblBooks.ISBN
-            WHERE tblReserveTransaction.UserID=?
-              AND tblReserveTransaction.IsBookBorrowed=0
-            """, (user_id,))
-        reserved_books = cursor.fetchall()
-
-        reserved_tree.delete(*reserved_tree.get_children())
-        for book in reserved_books:
-            reserved_tree.insert("", "end", values=(book[0], book[1]))
-    except Exception as e:
-        messagebox.showerror("Query Error", f"An error occurred: {e}")
-    finally:
-        conn.close()
-
-def load_reservation_records(username, reservation_tree):
-    """Load reservation records for the user and update the reservation tree."""
-    conn = connect_to_db()
-    if conn is None:
-        messagebox.showerror("Database Error", "Unable to connect to the database.")
-        return
-
-    cursor = conn.cursor()
-    query = """SELECT rt.ISBN, b.Title, rt.DateReserved
-               FROM tblReserveTransaction rt
-               JOIN tblBooks b ON rt.ISBN = b.ISBN
-               JOIN Users u ON rt.UserID = u.UserID
-               WHERE u.Username = ?"""
-    
-    try:
-        cursor.execute(query, (username,))
+            JOIN tblBooks ON tblReserveTransaction.ISBN = tblBooks.ISBN
+            WHERE UserID = ?
+        """, (username,))
         reservations = cursor.fetchall()
+        
+        # Update the reservation history tree
+        reservation_tree.delete(*reservation_tree.get_children())
+        for reservation in reservations:
+            reservation_tree.insert("", "end", values=reservation)
     except Exception as e:
-        messagebox.showerror("Database Error", f"Error executing query: {e}")
-        conn.close()
-        return
-
-    # Clear previous records in the reservation tree
-    for row in reservation_tree.get_children():
-        reservation_tree.delete(row)
-
-    # Insert new records into the reservation tree
-    for reservation in reservations:
-        reservation_tree.insert("", "end", values=(reservation[0], reservation[1], reservation[2]))
-
-    conn.close()
-
-
-# Return Book
-def return_book(username):
-    """Handle the return of selected books."""
-    selected_items = borrowing_tree.selection()
-    if not selected_items:
-        messagebox.showwarning("Selection Error", "No book selected. Please select a book to return.")
-        return
-
-    conn = connect_to_db()
-    if conn is None:
-        messagebox.showerror("Database Error", "Unable to connect to the database.")
-        return
-
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT UserID FROM tblusers WHERE Username=?", (username,))
-        user_id = cursor.fetchone()[0]
-
-        for item in selected_items:
-            isbn = borrowing_tree.item(item, "values")[0]
-
-            cursor.execute("""
-                UPDATE tblBorrowTran
-                SET IsBookReturned=1
-                WHERE UserID=? AND ISBN=? AND IsBookReturned=0
-                """, (user_id, isbn))
-
-            cursor.execute("""
-                INSERT INTO tblReturnTransaction (UserID, BTransactionNo, ISBN, DateReturned, Status)
-                SELECT UserID, TransactionNo, ISBN, ?, 'Returned'
-                FROM tblBorrowTran
-                WHERE UserID=? AND ISBN=? AND IsBookReturned=0
-                """, (datetime.now().date(), user_id, isbn))
-
-        conn.commit()
-        messagebox.showinfo("Return Successful", "Selected books have been returned successfully.")
-        load_borrowed_books(username)  # Refresh the list
-    except Exception as e:
-        messagebox.showerror("Return Error", f"An error occurred: {e}")
+        messagebox.showerror("Database Error", str(e))
     finally:
         conn.close()
 
-# Borrow Reserved Books
-def borrow_reserved_books(username):
-    """Handle the borrowing of reserved books."""
-    selected_items = reserved_tree.selection()
-    if not selected_items:
-        messagebox.showwarning("Selection Error", "No reserved book selected. Please select a book to borrow.")
-        return
+# Main application setup
+def main_window():
+    """Create the main application window."""
+    window = tk.Tk()
+    window.title("Library System")
+    
+    notebook = ttk.Notebook(window)
+    notebook.pack(fill=tk.BOTH, expand=1)
+    
+    # Create tabs for search and reservation
+    search_tab = ttk.Frame(notebook)
+    reservation_tab = ttk.Frame(notebook)
+    
+    notebook.add(search_tab, text="Search and Reserve")
+    notebook.add(reservation_tab, text="Reservation Record")
 
-    conn = connect_to_db()
-    if conn is None:
-        messagebox.showerror("Database Error", "Unable to connect to the database.")
-        return
+    username = "member_user"  # Example username
+    role = "member"  # Example role
 
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT UserID FROM tblusers WHERE Username=?", (username,))
-        user_id = cursor.fetchone()[0]
+    # Setup the tabs
+    book_reservation_window(search_tab, reservation_tab, username, role)
+    
+    window.mainloop()
 
-        for item in selected_items:
-            isbn = reserved_tree.item(item, "values")[0]
-
-            cursor.execute("""
-                UPDATE tblReserveTransaction
-                SET IsBookBorrowed=1
-                WHERE UserID=? AND ISBN=? AND IsBookBorrowed=0
-                """, (user_id, isbn))
-
-            cursor.execute("""
-                INSERT INTO tblBorrowTran (UserID, ISBN, DateBorrowed, IsBookReturned)
-                VALUES (?, ?, ?, 0)
-                """, (user_id, isbn, datetime.now().date()))
-
-        conn.commit()
-        messagebox.showinfo("Borrowing Successful", "Selected reserved books have been borrowed successfully.")
-        load_reserved_books(username)  # Refresh the list
-        load_borrowed_books(username)  # Refresh the borrowed books list
-    except Exception as e:
-        messagebox.showerror("Borrow Error", f"An error occurred: {e}")
-    finally:
-        conn.close()
-
-# Example Tkinter setup
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Library System")
-    tab_control = ttk.Notebook(root)
-
-    borrowing_tab = tk.Frame(tab_control)
-    reservation_tab = tk.Frame(tab_control)
-
-    tab_control.add(borrowing_tab, text="Borrowing")
-    tab_control.add(reservation_tab, text="Reservations")
-    tab_control.pack(expand=1, fill="both")
-
-    # Replace 'username' with the actual username you want to use
-    setup_borrowing_tab(borrowing_tab, 'username')
-    setup_reservation_tab(reservation_tab, 'username')
-
-    root.mainloop()
+    main_window()
