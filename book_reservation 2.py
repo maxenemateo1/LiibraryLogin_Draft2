@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from database import connect_to_db
 from datetime import datetime
+from borrowing_books import open_borrowing_books_window  # Import the borrowing window function
+
 
 # Function definitions from your code
 def book_reservation_window(search_tab, reservation_tab, username, role):
@@ -71,6 +73,8 @@ def setup_search_and_reserve_tab(tab, username):
 
     tk.Button(button_frame, text="Remove", relief=tk.GROOVE, command=lambda: remove_from_cart(cart_tree)).pack(side="top", padx=5, pady=5)
     tk.Button(button_frame, text="Reserve", relief=tk.GROOVE, command=lambda: reserve_books(cart_tree, username)).pack(side="top", padx=5, pady=5)
+    # New Borrow Books button
+    tk.Button(button_frame, text="Borrow Books", relief=tk.GROOVE, command=lambda: open_borrowing_books_window(username)).pack(side="top", padx=5, pady=5)
 
     # Filter Section
     filter_frame = tk.Frame(content_frame, relief=tk.GROOVE, borderwidth=2)
