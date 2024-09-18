@@ -1,301 +1,184 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-from datetime import datetime, timedelta
+from tkinter import messagebox, ttk
 from database import connect_to_db
+from datetime import datetime, timedelta
 
-def borrow_transaction_window(role, username):
-    # Create the main window
-    root = tk.Toplevel()
-    root.title("ABC Learning Resource Center")
-    root.geometry("800x500")
-
-    # Top frame for the title and user info
-    top_frame = tk.Frame(root)
-    top_frame.pack(side=tk.TOP, fill=tk.X)
-
-    title_label = tk.Label(top_frame, text="ABC Learning Resource Center", font=("Arial", 16))
-    title_label.pack(side=tk.LEFT, padx=10, pady=10)
-
-    welcome_label = tk.Label(top_frame, text=f"Welcome {username}!", font=("Arial", 12))
-    welcome_label.pack(side=tk.RIGHT, padx=10)
-
-    user_info_label = tk.Label(top_frame, text=f"You're logged in as {role.capitalize()}", font=("Arial", 10))
-    user_info_label.pack(side=tk.RIGHT, padx=10)
-
-    # Logout button
-    logout_button = tk.Button(top_frame, text="Log out", command=root.destroy)
-    logout_button.pack(side=tk.RIGHT, padx=10, pady=10)
-
-    # Notebook for tabs
-    notebook = ttk.Notebook(root)
-    notebook.pack(pady=10, expand=True)
-
-    # Create frames for each tab
-    borrow_tab = tk.Frame(notebook, width=800, height=400)
-    return_tab = tk.Frame(notebook, width=800, height=400)
-    admin_tab = tk.Frame(notebook, width=800, height=400)
-
-    borrow_tab.pack(fill='both', expand=True)
-    return_tab.pack(fill='both', expand=True)
-    admin_tab.pack(fill='both', expand=True)
-
-    # Add tabs to the notebook
-    notebook.add(borrow_tab, text='Borrow Transactions')
-    notebook.add(return_tab, text='Return Transactions')
-    notebook.add(admin_tab, text='Administrative Transactions')
-
-    # Sub-notebook for "Manual Entry" and "Reservation"
-    sub_notebook = ttk.Notebook(borrow_tab)
-    sub_notebook.pack(pady=10, expand=True)
-
-    manual_entry_frame = tk.Frame(sub_notebook, width=800, height=350)
-    reservation_frame = tk.Frame(sub_notebook, width=800, height=350)
-
-    manual_entry_frame.pack(fill='both', expand=True)
-    reservation_frame.pack(fill='both', expand=True)
-
-    sub_notebook.add(manual_entry_frame, text='Manual Entry')
-    sub_notebook.add(reservation_frame, text='Reservation')
-
-    # Search section in the "Manual Entry" tab
-    search_frame = tk.Frame(manual_entry_frame)
-    search_frame.pack(pady=10)
-
-    search_label = tk.Label(search_frame, text="Enter Member's ID No.:")
-    search_label.grid(row=0, column=0, padx=5)
-
-    search_entry = tk.Entry(search_frame)
-    search_entry.grid(row=0, column=1, padx=5)
-
-    search_button = tk.Button(search_frame, text="Search", command=lambda: search_transactions(search_entry.get().strip(), tree))
-    search_button.grid(row=0, column=2, padx=5)
-
-    # Table-like structure to display search results
-    results_frame = tk.Frame(manual_entry_frame)
-    results_frame.pack(pady=10, fill='both', expand=True)
-
-    # Treeview setup to display Title, ISBN, and Status
-    tree = ttk.Treeview(results_frame, columns=("Title", "ISBN", "Status"), show='headings')
-    tree.heading("Title", text="Title")
-    tree.heading("ISBN", text="ISBN")
-    tree.heading("Status", text="Status")
-
-    # Adjust the column width for better visibility
-    tree.column("Title", width=500, anchor=tk.W)
-    tree.column("ISBN", width=150, anchor=tk.W)
-    tree.column("Status", width=100, anchor=tk.W)
-
-    tree.pack(fill='both', expand=True)
-
-    # Buttons for actions
-    action_frame = tk.Frame(manual_entry_frame)
-    action_frame.pack(pady=10)
-
-    lend_button = tk.Button(action_frame, text="Lend selected books", command=lambda: lend_books(search_entry.get().strip(), tree))
-    lend_button.grid(row=0, column=0, padx=5)
-
-    remove_button = tk.Button(action_frame, text="Remove selected books", command=lambda: remove_books(tree))
-    remove_button.grid(row=0, column=1, padx=5)
-
-    print_button = tk.Button(action_frame, text="Print Receipt", command=lambda: print_receipt(search_entry.get().strip(), tree))
-    print_button.grid(row=0, column=2, padx=5)
-
-    def search_transactions(member_id, tree):
-        """Search all transactions by member ID and populate the Treeview with book titles, ISBNs, and status."""
-        if not member_id.isdigit():
-            messagebox.showerror("Input Error", "Member ID must be a valid number.")
+def setup_borrowing_transaction_facility(parent_window, username):
+    """Sets up the borrowing transaction facility UI in a given parent window."""
+    
+    def search_transactions():
+        """Searches for borrowing transactions based on Member ID."""
+        member_id = member_id_entry.get()
+        if not member_id:
+            messagebox.showwarning("Input Error", "Please enter a Member ID.")
             return
 
         conn = connect_to_db()
         if conn is None:
-            messagebox.showerror("Connection Error", "Could not connect to the database.")
+            messagebox.showerror("Database Error", "Unable to connect to the database.")
             return
 
         cursor = conn.cursor()
+        
+        # Fetch member's name
+        cursor.execute("SELECT Uname FROM tblUsers WHERE UserID = ?", (member_id,))
+        member_name_result = cursor.fetchone()
+        if member_name_result:
+            member_name = member_name_result[0]
+        else:
+            messagebox.showwarning("Member Not Found", "No member found with the given ID.")
+            conn.close()
+            return
+
+        # Fetch transactions
         query = """
-        SELECT b.Title, r.ISBN, 
-               CASE 
-                   WHEN EXISTS (SELECT 1 FROM tblBorrowTran bt WHERE bt.ISBN = r.ISBN AND bt.UserID = r.UserID) 
-                   THEN 'Lent'
-                   ELSE 'Reserved'
-               END AS Status
-        FROM tblReserveTransaction r
-        JOIN tblBooks b ON r.ISBN = b.ISBN
-        WHERE r.UserID = ?
-        UNION
-        SELECT b.Title, bt.ISBN, 'Lent' AS Status
-        FROM tblBorrowTran bt
-        JOIN tblBooks b ON bt.ISBN = b.ISBN
-        WHERE bt.UserID = ?
+            SELECT Title, ISBN
+            FROM tblBorrowTran bt
+            JOIN tblBooks b ON bt.ISBN = b.ISBN
+            WHERE bt.UserID = ?
+            AND bt.IsBookReturned = 0
         """
         try:
-            cursor.execute(query, (member_id, member_id))
-            results = cursor.fetchall()
-            tree.delete(*tree.get_children())  # Clear previous results
-
-            # Populate the treeview with search results
-            for row in results:
-                if len(row) == 3:  # Ensure correct data structure
-                    tree.insert('', 'end', values=(row[0], row[1], row[2]))
-
-            global borrower_name  # Set the borrower's name globally
-            borrower_name = results[0][2] if results else "Unknown"
-
+            cursor.execute(query, (member_id,))
+            rows = cursor.fetchall()
+            if rows:
+                transactions_treeview.delete(*transactions_treeview.get_children())  # Clear previous search results
+                for row in rows:
+                    transactions_treeview.insert('', 'end', values=(row[0], row[1]))
+            else:
+                messagebox.showinfo("No Results", "No transactions found for the given Member ID.")
         except Exception as e:
-            messagebox.showerror("Database Error", f"An error occurred: {e}")
+            messagebox.showerror("Query Error", f"An error occurred: {e}")
         finally:
             conn.close()
 
-    def lend_books(member_id, tree):
-        """Transfer reserved books to borrowed transactions for the given member ID."""
-        selected_items = tree.selection()
+    def lend_books():
+        """Lends the books and generates a printable report."""
+        selected_items = transactions_treeview.selection()
         if not selected_items:
-            messagebox.showwarning("Warning", "No items selected to lend.")
+            messagebox.showwarning("Selection Error", "Please select books to lend.")
             return
 
-        items = [tree.item(item, 'values') for item in selected_items]
+        member_id = member_id_entry.get()
+        if not member_id:
+            messagebox.showwarning("Input Error", "Please enter a Member ID.")
+            return
 
         conn = connect_to_db()
         if conn is None:
-            messagebox.showerror("Connection Error", "Could not connect to the database.")
+            messagebox.showerror("Database Error", "Unable to connect to the database.")
             return
 
         cursor = conn.cursor()
-        borrow_query = """
-        INSERT INTO tblBorrowTran (UserID, TransactionNo, DateBorrowed, ISBN, IsBookReturned, Notes) 
-        VALUES (?, ?, ?, ?, ?, ?)
-        """
-        reserve_query = """
-        DELETE FROM tblReserveTransaction
-        WHERE ISBN = ? AND UserID = ?
-        """
+        
+        # Fetch member's name again
+        cursor.execute("SELECT Uname FROM tblUsers WHERE UserID = ?", (member_id,))
+        member_name_result = cursor.fetchone()
+        member_name = member_name_result[0] if member_name_result else "Unknown"
 
-        try:
-            for idx, item in enumerate(items):
-                title, isbn, status = item
-                transaction_no = idx + 1  # Example transaction number; adjust logic as needed
+        transaction_number = f"T{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        date_borrowed = datetime.now().strftime("%Y-%m-%d")
+        due_date = (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")  # Assuming 2 weeks due date
 
-                # Insert into tblBorrowTran
-                cursor.execute(borrow_query, (int(member_id), transaction_no, datetime.now(), isbn, False, ''))
-                # Remove from tblReserveTransaction
-                cursor.execute(reserve_query, (isbn, int(member_id)))
+        report_text = (
+            f"ABC LEARNING RESOURCE CENTER\n"
+            f"Date Borrowed: {date_borrowed}\n"
+            f"Transaction No: {transaction_number}\n"
+            f"Date Due: {due_date}\n"
+            f"Member's Name: {member_name}\n"
+            f"Member's ID: {member_id}\n\n"
+            f"Books Borrowed:\n"
+        )
 
-                # Update the status in the treeview
-                tree.item(tree.selection()[idx], values=(title, isbn, 'Lent'))
-
-            conn.commit()
-            messagebox.showinfo("Success", "Books successfully lent.")
-            
-            # Print the receipt after lending books
-            print_receipt(member_id, tree)
-
-        except Exception as e:
-            messagebox.showerror("Database Error", f"An error occurred: {e}")
-        finally:
-            conn.close()
-
-    def remove_books(tree):
-        """Remove selected books from the Treeview."""
-        selected_items = tree.selection()
-        if not selected_items:
-            messagebox.showwarning("Warning", "No items selected to remove.")
-            return
-
+        books = []
         for item in selected_items:
-            tree.delete(item)
+            book_title, book_isbn = transactions_treeview.item(item, 'values')
+            books.append((book_title, book_isbn))
 
-    def print_receipt(member_id, tree):
-        """Open a new window to display the formatted receipt."""
-        receipt_window = tk.Toplevel(root)
-        receipt_window.title("Receipt")
-        receipt_window.geometry("400x400")
+            # Update the database to mark books as borrowed
+            cursor.execute("UPDATE tblBorrowTran SET TransactionNo = ?, DateBorrowed = ?, IsBookReturned = 0 WHERE ISBN = ? AND UserID = ?",
+                           (transaction_number, date_borrowed, book_isbn, member_id))
 
-        receipt_text = tk.Text(receipt_window, wrap=tk.WORD)
-        receipt_text.pack(expand=True, fill='both')
+        for title, isbn in books:
+            report_text += f"{title} | {isbn}\n"
 
-        # Gather information for the receipt
-        date_borrowed = datetime.now().strftime("%d-%B-%Y")
-        due_date = (datetime.now() + timedelta(days=7)).strftime("%d-%B-%Y")
+        report_text += "\nThank you for using our library!"
 
-        # Header information
-        receipt_info = f"""
-ABC Learning Resource Center
-Date Borrowed: {date_borrowed}
-Date Due: {due_date}
-Transaction No.: {member_id}
+        # Display the report
+        report_window = tk.Toplevel(parent_window)
+        report_window.title("Borrowing Transaction Report")
+        report_window.geometry("400x400")
 
-Title                       ISBN
----------------------------------
-"""
-        # Fetch data from Treeview for selected books
-        for item in tree.get_children():
-            title, isbn, status = tree.item(item, 'values')
-            receipt_info += f"{title[:25]:25} {isbn}\n"
+        report_label = tk.Label(report_window, text="Generated Printable Report", font=("Arial", 12, "bold"))
+        report_label.pack(pady=10)
 
-        # Footer information
-        receipt_info += f"""
----------------------------------
-This is to certify that I received the books above in good condition and agree to pay the corresponding penalties of Php 20.00/day per book if not returned within the due date. I also agree to pay the corresponding book amount in case I lose possession of the book.
+        report_textbox = tk.Text(report_window, wrap=tk.WORD)
+        report_textbox.insert(tk.END, report_text)
+        report_textbox.config(state=tk.DISABLED)  # Make the text box read-only
+        report_textbox.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-{borrower_name}
-Signature
-"""
+        close_button = tk.Button(report_window, text="Close", command=report_window.destroy)
+        close_button.pack(side=tk.LEFT, padx=10, pady=10)
 
-        # Display receipt information in the Text widget
-        receipt_text.insert(tk.END, receipt_info)
+        print_button = tk.Button(report_window, text="Print", command=lambda: print_report(report_text))
+        print_button.pack(side=tk.RIGHT, padx=10, pady=10)
 
-    def populate_reservation_frame():
-        """Populate the reservation_frame with all reserved and lent books."""
-        conn = connect_to_db()
-        if conn is None:
-            messagebox.showerror("Connection Error", "Could not connect to the database.")
-            return
+        conn.commit()
+        conn.close()
 
-        cursor = conn.cursor()
-        query = """
-        SELECT b.Title, r.ISBN, 'Reserved' AS Status
-        FROM tblReserveTransaction r
-        JOIN tblBooks b ON r.ISBN = b.ISBN
-        UNION
-        SELECT b.Title, bt.ISBN, 'Lent' AS Status
-        FROM tblBorrowTran bt
-        JOIN tblBooks b ON bt.ISBN = b.ISBN
-        """
+    def print_report(report_text):
+        """Prints the report."""
         try:
-            cursor.execute(query)
-            results = cursor.fetchall()
-            tree_reservation.delete(*tree_reservation.get_children())  # Clear previous results
-
-            # Populate the treeview with search results
-            for row in results:
-                if len(row) == 3:  # Ensure correct data structure
-                    tree_reservation.insert('', 'end', values=(row[0], row[1], row[2]))
-
+            # This method is just a placeholder. Implement actual print functionality if required.
+            print("Printing report...")
+            print(report_text)
+            messagebox.showinfo("Print", "Report sent to printer.")
         except Exception as e:
-            messagebox.showerror("Database Error", f"An error occurred: {e}")
-        finally:
-            conn.close()
+            messagebox.showerror("Print Error", f"An error occurred while printing: {e}")
 
-    # Treeview setup to display all reservations and borrowed books
-    reservation_results_frame = tk.Frame(reservation_frame)
-    reservation_results_frame.pack(pady=10, fill='both', expand=True)
+    # Main window setup
+    parent_window.title("Borrowing Transaction Facility")
 
-    tree_reservation = ttk.Treeview(reservation_results_frame, columns=("Title", "ISBN", "Status"), show='headings')
-    tree_reservation.heading("Title", text="Title")
-    tree_reservation.heading("ISBN", text="ISBN")
-    tree_reservation.heading("Status", text="Status")
+    header_label = tk.Label(parent_window, text="ABC LEARNING RESOURCE CENTER", font=("Arial", 16, "bold"))
+    header_label.pack(pady=10)
 
-    # Adjust the column width for better visibility
-    tree_reservation.column("Title", width=500, anchor=tk.W)
-    tree_reservation.column("ISBN", width=150, anchor=tk.W)
-    tree_reservation.column("Status", width=100, anchor=tk.W)
+    welcome_label = tk.Label(parent_window, text=f"Welcome, {username}!", anchor="e", padx=20)
+    welcome_label.pack(fill=tk.X)
 
-    tree_reservation.pack(fill='both', expand=True)
+    tab_control = ttk.Notebook(parent_window)
+    tab_control.pack(fill=tk.BOTH, expand=1)
 
-    # Populate the reservation frame initially
-    populate_reservation_frame()
+    # Transaction Record Tab
+    transaction_tab = tk.Frame(tab_control)
+    tab_control.add(transaction_tab, text="Transaction Record")
 
-    root.mainloop()
+    search_frame = tk.Frame(transaction_tab)
+    search_frame.pack(pady=10, padx=10, fill=tk.X)
 
-if __name__ == "__main__":
-    borrow_transaction_window("admin", "admin1")  # Use a valid role and user ID for testing
+    tk.Label(search_frame, text="Enter Member's ID No:").pack(side=tk.LEFT)
+    member_id_entry = tk.Entry(search_frame)
+    member_id_entry.pack(side=tk.LEFT, padx=5)
+
+    search_button = tk.Button(search_frame, text="Search", command=search_transactions)
+    search_button.pack(side=tk.LEFT, padx=5)
+
+    transactions_frame = tk.Frame(transaction_tab)
+    transactions_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=1)
+
+    transactions_treeview = ttk.Treeview(transactions_frame, columns=("Title", "ISBN"), show='headings')
+    transactions_treeview.heading("Title", text="Title")
+    transactions_treeview.heading("ISBN", text="ISBN")
+    transactions_treeview.column("Title", width=200)
+    transactions_treeview.column("ISBN", width=100)
+    transactions_treeview.pack(fill=tk.BOTH, expand=1)
+
+    lend_buttons_frame = tk.Frame(transaction_tab)
+    lend_buttons_frame.pack(pady=10, padx=10, fill=tk.X)
+
+    remove_button = tk.Button(lend_buttons_frame, text="Remove Selected Item", command=lambda: transactions_treeview.delete(transactions_treeview.selection()))
+    remove_button.pack(side=tk.LEFT, padx=5)
+
+    lend_button = tk.Button(lend_buttons_frame, text="Lend Listed Books", command=lend_books)
+    lend_button.pack(side=tk.LEFT, padx=5)
+
+# Note: Ensure you have appropriate imports and that `connect_to_db` function is defined in `database.py`.
